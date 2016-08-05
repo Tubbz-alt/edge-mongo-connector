@@ -684,7 +684,7 @@ def get_config_options():
         "exported. Supports dot notation for document fields but cannot span "
         "arrays. Cannot use both 'fields' and 'exclude_fields'.")
 
-    def regex_apply_exclude_fields(option, cli_values):
+    def apply_regex_exclude_fields(option, cli_values):
         if cli_values['regex_exclude_fields']:
             option.value = cli_values['regex_exclude_fields'].split(",")
 
@@ -765,7 +765,7 @@ def get_config_options():
         "will be mapped respectively according to this "
         "comma-separated list. These lists must have "
         "equal length. The default is to use the identity "
-        "mapping. This works for mongo-to-mongo as well as" 
+        "mapping. This works for mongo-to-mongo as well as"
         "mongo-to-elasticsearch connections.")
 
     # --gridfs-set is the set of GridFS namespaces to consider
