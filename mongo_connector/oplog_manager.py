@@ -17,6 +17,7 @@
 
 import bson
 import logging
+import re
 try:
     import Queue as queue
 except ImportError:
@@ -89,6 +90,11 @@ class OplogThread(threading.Thread):
         if kwargs.get('exclude_fields', None):
             self.exclude_fields = kwargs['exclude_fields']
 
+        # Set of regex fields to filter
+        self._regex_exclude_fields = set([])
+        if kwargs.get('regex_exclude_fields', None):
+            self._regex_exclude_fields = kwargs['regex_exclude_fields']
+
         LOG.info('OplogThread: Initializing oplog thread')
 
         self.oplog = self.primary_client.local.oplog.rs
@@ -111,6 +117,12 @@ class OplogThread(threading.Thread):
             return list(self._exclude_fields)
         return None
 
+    @property
+    def regex_exclude_fields(self):
+        if self._regex_exclude_fields:
+            return list(self._regex_exclude_fields)
+        return None
+
     @fields.setter
     def fields(self, value):
         if self._exclude_fields:
@@ -125,6 +137,14 @@ class OplogThread(threading.Thread):
         else:
             self._fields = set([])
             self._projection = None
+
+    @exclude_fields.setter
+    def regex_exclude_fields(self, value):
+        if value:
+            self._regex_exclude_fields = set(value)
+        else:
+            self._regex_exclude_fields = set([])
+
 
     @exclude_fields.setter
     def exclude_fields(self, value):
@@ -371,8 +391,18 @@ class OplogThread(threading.Thread):
         self.running = False
         threading.Thread.join(self)
 
+    def _pop_regex_excluded_fields(self, c):
+        for key in c.keys():
+            for regex in self._regex_exclude_fields:
+                if re.match(regex, key):
+                    del c[key]
+
+            if key in c and isinstance(c[key], dict):
+                self._pop_regex_excluded_fields(c[key])
+
     def _pop_excluded_fields(self, doc):
         # Remove all the fields that were passed in exclude_fields.
+        LOG.debug("OplogThread: _pop_excluded_fields");
         for field in self._exclude_fields:
             curr_doc = doc
             dots = field.split('.')
@@ -387,6 +417,7 @@ class OplogThread(threading.Thread):
                 curr_doc = curr_doc[part]
             else:
                 remove_up_to.pop(end)
+        self._pop_regex_excluded_fields(doc)
         return doc  # Need this to be similar to copy_included_fields.
 
     def _copy_included_fields(self, doc):
@@ -406,13 +437,14 @@ class OplogThread(threading.Thread):
                 for part in dots[:-1]:
                     edit_doc = edit_doc.setdefault(part, {})
                 edit_doc[dots[-1]] = curr_doc
-
+        self._pop_regex_excluded_fields(new_doc)
         return new_doc
 
     def filter_oplog_entry(self, entry):
         """Remove fields from an oplog entry that should not be replicated.
 
         NOTE: this does not support array indexing, for example 'a.b.2'"""
+
         if not self._fields and not self._exclude_fields:
             return entry
         elif self._fields:
@@ -523,6 +555,7 @@ class OplogThread(threading.Thread):
                     )
                 try:
                     for doc in cursor:
+                        self._pop_regex_excluded_fields(doc)
                         if not self.running:
                             raise StopIteration
                         last_id = doc["_id"]
@@ -861,6 +894,7 @@ class OplogThread(threading.Thread):
                     for doc in to_update:
                         if doc['_id'] in doc_hash:
                             del doc_hash[doc['_id']]
+                            self._pop_regex_excluded_fields(doc)
                             to_index.append(doc)
                 retry_until_ok(collect_existing_docs)
 

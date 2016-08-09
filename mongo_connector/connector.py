@@ -155,6 +155,7 @@ class Connector(threading.Thread):
             auth_key=auth_key,
             fields=config['fields'],
             exclude_fields=config['exclude_fields'],
+            regex_exclude_fields=config['regex_exclude_fields'],
             ns_set=config['namespaces.include'],
             dest_mapping=config['namespaces.mapping'],
             gridfs_set=config['namespaces.gridfs'],
@@ -683,6 +684,22 @@ def get_config_options():
         "exported. Supports dot notation for document fields but cannot span "
         "arrays. Cannot use both 'fields' and 'exclude_fields'.")
 
+    def apply_regex_exclude_fields(option, cli_values):
+        if cli_values['regex_exclude_fields']:
+            option.value = cli_values['regex_exclude_fields'].split(",")
+
+    regex_exclude_fields = add_option(
+        config_key="regex_exclude_fields",
+        default=[],
+        type=list,
+        apply_function=apply_regex_exclude_fields)
+
+    regex_exclude_fields.add_cli(
+        "-r", "--regex_exclude_fields", dest="regex_exclude_fields", help=
+        "Use a comma separated list of regex fields to specify multiple "
+        "fields to exclude. Will delete the fields that match from the "
+        "existing document.")
+
     def apply_namespaces(option, cli_values):
         if cli_values['ns_set']:
             option.value['include'] = cli_values['ns_set'].split(',')
@@ -748,7 +765,7 @@ def get_config_options():
         "will be mapped respectively according to this "
         "comma-separated list. These lists must have "
         "equal length. The default is to use the identity "
-        "mapping. This works for mongo-to-mongo as well as" 
+        "mapping. This works for mongo-to-mongo as well as"
         "mongo-to-elasticsearch connections.")
 
     # --gridfs-set is the set of GridFS namespaces to consider
