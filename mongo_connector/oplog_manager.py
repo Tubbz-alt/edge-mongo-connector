@@ -34,9 +34,10 @@ from mongo_connector import errors, util
 from mongo_connector.constants import DEFAULT_BATCH_SIZE
 from mongo_connector.gridfs_file import GridFSFile
 from mongo_connector.util import log_fatal_exceptions, retry_until_ok
+from elasticsearch.helpers import BulkIndexError
 
 LOG = logging.getLogger(__name__)
-
+REGEX_BROKEN_FIELD = re.compile('\[(data.*?)\]')
 
 class OplogThread(threading.Thread):
     """Thread that tails an oplog.
@@ -499,6 +500,18 @@ class OplogThread(threading.Thread):
             cursor.add_option(8)
         return cursor
 
+    def update_excluded_fields(self, e):
+        excluded_fields = self.exclude_fields if self.exclude_fields else []
+        found_field = set()
+        for error in e.errors:
+            error_message = error.get('index', {}).get('error', {}).get('reason', '')
+            fields = REGEX_BROKEN_FIELD.findall(error_message)
+            for field in fields:
+                if field not in (found_field, excluded_fields):
+                    found_field.add(field)
+                    excluded_fields.append(field)
+        self.exclude_fields = excluded_fields
+
     def dump_collection(self):
         """Dumps collection into the target system.
 
@@ -593,14 +606,17 @@ class OplogThread(threading.Thread):
                 for namespace in dump_set:
                     mapped_ns = self.dest_mapping.get(namespace, namespace)
                     dm.bulk_upsert(docs_to_dump(namespace), mapped_ns, long_ts)
-            except Exception:
+            except BulkIndexError as e:
                 if self.continue_on_error:
                     LOG.exception("OplogThread: caught exception"
                                   " during bulk upsert, re-upserting"
                                   " documents serially")
-                    upsert_each(dm)
+                    self.update_excluded_fields(e)
+                    upsert_all(dm)
                 else:
                     raise
+            except Exception as e:
+                raise e
 
         def do_dump(dm, error_queue):
             try:
