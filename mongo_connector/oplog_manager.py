@@ -610,7 +610,7 @@ class OplogThread(threading.Thread):
                 if self.continue_on_error:
                     LOG.exception("OplogThread: caught exception"
                                   " during bulk upsert, re-upserting"
-                                  " documents serially")
+                                  " documents in bulk")
                     self.update_excluded_fields(e)
                     upsert_all(dm)
                 else:
