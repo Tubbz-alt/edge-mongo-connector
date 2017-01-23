@@ -18,6 +18,7 @@
 import bson
 import logging
 import re
+import copy
 try:
     import Queue as queue
 except ImportError:
@@ -401,9 +402,21 @@ class OplogThread(threading.Thread):
             if key in c and isinstance(c[key], dict):
                 self._pop_regex_excluded_fields(c[key])
 
+    def _update_edge_extra_location(self, doc, coll):
+        if coll == 'edge_extra':
+            doc_copy = copy.deepcopy(doc)
+            try:
+                latest_geo_data = doc.get('geolocation', [])[-1]
+                lat, lon = latest_geo_data.get('latitude'), latest_geo_data.get('longitude')
+                location = [lon, lat]
+                created_on = latest_geo_data.get('time')
+                doc.update({'location': location, 'created_on': created_on})
+            except Exception:
+                doc = doc_copy
+
     def _pop_excluded_fields(self, doc):
         # Remove all the fields that were passed in exclude_fields.
-        LOG.debug("OplogThread: _pop_excluded_fields");
+        LOG.debug("OplogThread: _pop_excluded_fields")
         for field in self._exclude_fields:
             curr_doc = doc
             dots = field.split('.')
@@ -569,6 +582,7 @@ class OplogThread(threading.Thread):
                 try:
                     for doc in cursor:
                         self._pop_regex_excluded_fields(doc)
+                        self._update_edge_extra_location(doc, coll)
                         if not self.running:
                             raise StopIteration
                         last_id = doc["_id"]
