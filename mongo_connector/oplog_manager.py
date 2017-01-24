@@ -408,11 +408,14 @@ class OplogThread(threading.Thread):
             try:
                 latest_geo_data = doc.get('geolocation', [])[-1]
                 lat, lon = latest_geo_data.get('latitude'), latest_geo_data.get('longitude')
+                if not lat or not lon:
+                    return False
                 location = [lon, lat]
                 created_on = latest_geo_data.get('time')
                 doc.update({'location': location, 'created_on': created_on})
             except Exception:
-                doc = doc_copy
+                return False
+        return True
 
     def _pop_excluded_fields(self, doc):
         # Remove all the fields that were passed in exclude_fields.
@@ -582,7 +585,8 @@ class OplogThread(threading.Thread):
                 try:
                     for doc in cursor:
                         self._pop_regex_excluded_fields(doc)
-                        self._update_edge_extra_location(doc, coll)
+                        if not self._update_edge_extra_location(doc, coll):
+                            continue
                         if not self.running:
                             raise StopIteration
                         last_id = doc["_id"]
