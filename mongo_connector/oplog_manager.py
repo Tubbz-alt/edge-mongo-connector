@@ -408,7 +408,9 @@ class OplogThread(threading.Thread):
             try:
                 latest_geo_data = doc.get('geolocation', [])[-1]
                 lat, lon = latest_geo_data.get('latitude'), latest_geo_data.get('longitude')
-                location = [lon, lat]
+                location = []
+                if lat and lon:
+                    location = [lon, lat]
                 created_on = latest_geo_data.get('time')
                 doc.update({'location': location, 'created_on': created_on})
             except Exception:
@@ -515,15 +517,18 @@ class OplogThread(threading.Thread):
 
     def update_excluded_fields(self, e):
         excluded_fields = self.exclude_fields if self.exclude_fields else []
+        id = None
         found_field = set()
         for error in e.errors:
             error_message = error.get('index', {}).get('error', {}).get('reason', '')
+            id = error.get('index', {}).get('_id')
             fields = REGEX_BROKEN_FIELD.findall(error_message)
             for field in fields:
                 if field not in (found_field, excluded_fields):
                     found_field.add(field)
                     excluded_fields.append(field)
         self.exclude_fields = excluded_fields
+        return id
 
     def dump_collection(self):
         """Dumps collection into the target system.
@@ -558,9 +563,9 @@ class OplogThread(threading.Thread):
                     namespace = "%s.%s" % (database, coll)
                     dump_set.append(namespace)
 
-        def docs_to_dump(namespace):
+        def docs_to_dump(namespace, last_id=None):
             database, coll = namespace.split('.', 1)
-            last_id = None
+            #last_id = None
             attempts = 0
 
             # Loop to handle possible AutoReconnect
@@ -575,7 +580,7 @@ class OplogThread(threading.Thread):
                 else:
                     cursor = util.retry_until_ok(
                         target_coll.find,
-                        {"_id": {"$gt": last_id}},
+                        {"_id": {"$gte": last_id}},
                         projection=self._projection,
                         sort=[("_id", pymongo.ASCENDING)]
                     )
@@ -615,18 +620,19 @@ class OplogThread(threading.Thread):
             if num_failed > 0:
                 LOG.error("Failed to upsert %d docs" % num_failed)
 
-        def upsert_all(dm):
+        def upsert_all(dm, last_id=None, index_from=0):
             try:
-                for namespace in dump_set:
+                for namespace in dump_set[index_from:]:
                     mapped_ns = self.dest_mapping.get(namespace, namespace)
-                    dm.bulk_upsert(docs_to_dump(namespace), mapped_ns, long_ts)
+                    dm.bulk_upsert(docs_to_dump(namespace, last_id=last_id), mapped_ns, long_ts)
             except BulkIndexError as e:
                 if self.continue_on_error:
                     LOG.exception("OplogThread: caught exception"
                                   " during bulk upsert, re-upserting"
                                   " documents in bulk")
-                    self.update_excluded_fields(e)
-                    upsert_all(dm)
+                    _id = self.update_excluded_fields(e)
+                    index_from = dump_set.index(namespace)
+                    upsert_all(dm, last_id=_id, index_from=index_from)
                 else:
                     raise
             except Exception as e:
