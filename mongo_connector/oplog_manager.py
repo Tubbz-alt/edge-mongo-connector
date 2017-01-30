@@ -632,8 +632,8 @@ class OplogThread(threading.Thread):
                                   " during bulk upsert, re-upserting"
                                   " documents in bulk")
                     _id = self.update_excluded_fields(e)
-                    index_from = dump_set.index(namespace)
-                    upsert_all(dm, last_id=_id, index_from=index_from)
+                    _index_from = dump_set.index(namespace)
+                    upsert_all(dm, last_id=_id, index_from=_index_from)
                 else:
                     raise
             except Exception as e:
