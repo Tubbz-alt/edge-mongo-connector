@@ -329,7 +329,15 @@ class OplogThread(threading.Thread):
                                 elif operation == 'c':
                                     # use unmapped namespace
                                     doc = entry.get('o')
-                                    docman.handle_command(doc,
+                                    if doc.get('renameCollection'):
+                                        db = entry['ns'].split('.', 1)[0]
+                                        db, coll = docman.command_helper.map_collection(db, doc['renameCollection'])
+                                        if doc and coll:
+                                            docman.handle_command(doc,
+                                                                  entry['ns'],
+                                                                  timestamp)
+                                    else:
+                                        docman.handle_command(doc,
                                                           entry['ns'],
                                                           timestamp)
 
