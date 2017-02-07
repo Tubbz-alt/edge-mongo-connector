@@ -528,8 +528,7 @@ class OplogThread(threading.Thread):
         try:
             with open(self.config_file, 'r') as configFile:
                 original = json.load(configFile)
-                for field in excluded_fields:
-                    original.setdefault('exclude_fields', []).append(field)
+                original['exclude_fields'] = excluded_fields
 
             with open(temp_config_location, 'w') as tempConfigFile:
                 tempConfigFile.write(json.dumps(original, indent=2))
