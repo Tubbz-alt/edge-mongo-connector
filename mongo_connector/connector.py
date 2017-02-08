@@ -156,6 +156,7 @@ class Connector(threading.Thread):
             fields=config['fields'],
             exclude_fields=config['exclude_fields'],
             regex_exclude_fields=config['regex_exclude_fields'],
+            config_file=config['configFile'],
             ns_set=config['namespaces.include'],
             dest_mapping=config['namespaces.mapping'],
             gridfs_set=config['namespaces.gridfs'],
@@ -1009,7 +1010,7 @@ def get_config_options():
         " set of documents due to errors may cause undefined"
         " behavior. Use this flag to dump only.")
 
-    config_file = add_option()
+    config_file = add_option(config_key='configFile', default="", type=str)
     config_file.add_cli(
         "-c", "--config-file", dest="config_file", help=
         "Specify a JSON file to load configurations from. You can find"

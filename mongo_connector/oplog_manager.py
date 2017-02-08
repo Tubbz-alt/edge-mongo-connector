@@ -18,7 +18,8 @@
 import bson
 import logging
 import re
-import copy
+import json
+from shutil import move
 try:
     import Queue as queue
 except ImportError:
@@ -96,6 +97,8 @@ class OplogThread(threading.Thread):
         self._regex_exclude_fields = set([])
         if kwargs.get('regex_exclude_fields', None):
             self._regex_exclude_fields = kwargs['regex_exclude_fields']
+
+        self.config_file = kwargs.get('config_file', "")
 
         LOG.info('OplogThread: Initializing oplog thread')
 
@@ -520,6 +523,22 @@ class OplogThread(threading.Thread):
             cursor.add_option(8)
         return cursor
 
+    def _update_config_file(self, excluded_fields):
+        temp_config_location = '/tmp/mongo-connector.json'
+        try:
+            with open(self.config_file, 'r') as configFile:
+                original = json.load(configFile)
+                original['exclude_fields'] = excluded_fields
+
+            with open(temp_config_location, 'w') as tempConfigFile:
+                tempConfigFile.write(json.dumps(original, indent=2))
+
+            move(temp_config_location, self.config_file)
+            LOG.info("Updated the mongo-connector config to exclude fields: %s" %
+                      (", ".join(excluded_fields)))
+        except IOError as e:
+            LOG.exception("Failed to update mongo-connector config file: %s" % (str(e)))
+
     def update_excluded_fields(self, e):
         excluded_fields = self.exclude_fields if self.exclude_fields else []
         id = None
@@ -533,6 +552,7 @@ class OplogThread(threading.Thread):
                     found_field.add(field)
                     excluded_fields.append(field)
         self.exclude_fields = excluded_fields
+        self._update_config_file(excluded_fields)
         return id
 
     def dump_collection(self):
