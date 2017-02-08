@@ -534,10 +534,10 @@ class OplogThread(threading.Thread):
                 tempConfigFile.write(json.dumps(original, indent=2))
 
             move(temp_config_location, self.config_file)
-            LOG.info("Updated the mongo-connector config to  exclude fields: %s" %
+            LOG.info("Updated the mongo-connector config to exclude fields: %s" %
                       (", ".join(excluded_fields)))
-        except Exception as e:
-            LOG.exception("Failed to update mongo-connector config file: %s" % (e.message))
+        except IOError as e:
+            LOG.exception("Failed to update mongo-connector config file: %s" % (str(e)))
 
     def update_excluded_fields(self, e):
         excluded_fields = self.exclude_fields if self.exclude_fields else []
