@@ -542,14 +542,13 @@ class OplogThread(threading.Thread):
     def update_excluded_fields(self, e):
         excluded_fields = self.exclude_fields if self.exclude_fields else []
         id = None
-        found_field = set()
         for error in e.errors:
             error_message = error.get('index', {}).get('error', {}).get('reason', '')
-            id = error.get('index', {}).get('_id')
+            if not id:
+                id = error.get('index', {}).get('_id')
             fields = REGEX_BROKEN_FIELD.findall(error_message)
             for field in fields:
-                if field not in (found_field, excluded_fields):
-                    found_field.add(field)
+                if field not in excluded_fields:
                     excluded_fields.append(field)
         self.exclude_fields = excluded_fields
         self._update_config_file(excluded_fields)
