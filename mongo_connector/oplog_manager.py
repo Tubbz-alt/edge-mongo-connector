@@ -282,6 +282,10 @@ class OplogThread(threading.Thread):
                         if coll.endswith('.chunks'):
                             continue
 
+                        # Update edge_extra documents
+                        if not self._update_edge_extra_location(entry['o'], coll):
+                            continue
+
                         is_gridfs_file = False
                         if coll.endswith(".files"):
                             if ns in self.gridfs_files_set:
